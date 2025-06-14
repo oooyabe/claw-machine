@@ -58,9 +58,9 @@ function Instructions() {
     <div className="absolute top-4 right-4 max-w-xs bg-white/90 backdrop-blur-sm p-3 rounded-lg text-sm leading-relaxed shadow-md z-50">
       <p className="font-semibold mb-1">🎮 遊戲玩法</p>
       <ul className="list-disc list-inside space-y-1">
-        <li>使用 <span className="font-semibold">W/A/S/D</span> 或方向鍵移動爪子。</li>
-        <li>按 <span className="font-semibold">Space</span> 下降抓娃娃。</li>
-        <li>每次抓取有 50% 機率成功。</li>
+        <li>使用 <span className="font-semibold">A/D</span> 或方向鍵左右移動爪子</li>
+        <li>按 <span className="font-semibold">Space</span> 下降抓娃娃</li>
+        <li>每次抓取有 50% 機率成功</li>
         <li>成功 <span className="font-semibold">3 次</span> 即過關！</li>
       </ul>
     </div>

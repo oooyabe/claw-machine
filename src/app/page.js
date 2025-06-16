@@ -4,22 +4,37 @@ import { useState, useRef, Suspense, useEffect } from "react";
 import * as THREE from "three";
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
-  RoundedBox,
   CameraControls,
   Environment,
   ContactShadows,
   KeyboardControls,
   useGLTF,
   axesHelper,
+  useKeyboardControls,
 } from "@react-three/drei";
-import ClawCamera from "@/component/ClawCamera";
 
-/* ---------------- 爪子模型 ---------------- */
-function ClawModel({ clawPos }) {
+
+const PRIZES = [
+  { name: "熊熊娃娃", icon: "🧸" },
+  { name: "棒棒糖", icon: "🍭" },
+  { name: "小鴨鴨", icon: "🦆" }
+];
+const FAIL = { name: "沒抓到", icon: "💦" };
+
+
+function ClawModel({ clawPos, targetY, setClawPos }) {
   const { scene } = useGLTF("/claw.glb");
   const clawRef = useRef();
 
   useFrame(() => {
+    
+    if (Math.abs(clawPos.y - targetY) > 0.01) {
+      const newY = clawPos.y + (targetY - clawPos.y) * 0.06;
+      setClawPos((pos) => ({ ...pos, y: newY }));
+    } else if (clawPos.y !== targetY) {
+      setClawPos((pos) => ({ ...pos, y: targetY }));
+    }
+
     if (!clawRef.current) return;
     clawRef.current.traverse((child) => {
       switch (child.name) {
@@ -39,65 +54,110 @@ function ClawModel({ clawPos }) {
   return <primitive ref={clawRef} object={scene} scale={0.6} />;
 }
 
-/* ---------------- 彈窗 ---------------- */
-function Popup({ text }) {
-  if (!text) return null;
-  if (text.includes("任務完成")) return null; // 🛠️ 避免任務完成重複顯示在彈窗
+
+function ClawCamera({ clawPos, setClawPos }) {
+  const [, getKeys] = useKeyboardControls();
+
+  useFrame(() => {
+    const keys = getKeys();
+    let { x, y, z } = clawPos;
+    let moved = false;
+
+    if (keys.forward) {
+      z -= 0.05;
+      moved = true;
+    }
+    if (keys.backward) {
+      z += 0.05;
+      moved = true;
+    }
+    if (keys.left) {
+      x -= 0.05;
+      moved = true;
+    }
+    if (keys.right) {
+      x += 0.05;
+      moved = true;
+    }
+    
+    x = Math.max(-0.7, Math.min(0.7, x));
+    z = Math.max(-0.7, Math.min(0.4, z));
+
+    if (moved) setClawPos((prev) => ({ ...prev, x, z }));
+  });
+
+  return null;
+}
+
+function Popup({ prize }) {
+  if (!prize) return null;
+  if (prize.done) return null;
   return (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50">
-      <div className="bg-black/70 text-white px-8 py-4 rounded-lg text-xl shadow-lg">
-        {text}
+      <div className="bg-black/70 text-white px-8 py-6 rounded-lg text-xl shadow-lg flex flex-col items-center">
+        <span style={{ fontSize: 48 }}>{prize.icon}</span>
+        <span className="mt-2">{prize.name}</span>
       </div>
     </div>
   );
 }
 
-/* ---------------- 遊戲說明 ---------------- */
 function Instructions() {
   return (
     <div className="absolute top-4 right-4 max-w-xs bg-white/90 backdrop-blur-sm p-3 rounded-lg text-sm leading-relaxed shadow-md z-50">
       <p className="font-semibold mb-1">🎮 遊戲玩法</p>
       <ul className="list-disc list-inside space-y-1">
-        <li>使用 <span className="font-semibold">A/D</span> 或方向鍵左右移動爪子</li>
-        <li>按 <span className="font-semibold">Space</span> 下降抓娃娃</li>
-        <li>每次抓取有 50% 機率成功</li>
-        <li>成功 <span className="font-semibold">3 次</span> 即過關！</li>
+        <li>
+          使用 <span className="font-semibold">W/A/S/D</span> 或方向鍵移動爪子
+        </li>
+        <li>
+          按 <span className="font-semibold">Space</span> 下降抓娃娃
+        </li>
+        <li>
+          隨機獲得不同獎品🧸🍭🦆
+        </li>
       </ul>
     </div>
   );
 }
 
-/* ---------------- 主頁面 ---------------- */
 export default function Home() {
-  /* 基本狀態 */
   const [clawPos, setClawPos] = useState({ x: 0, y: 0, z: 0 });
-  const [isClawDown, setIsClawDown] = useState(false);
-  const [popup, setPopup] = useState("");
-  const [successCount, setSuccessCount] = useState(0);
-  const [attemptCount, setAttemptCount] = useState(0);
-  const [gameOver, setGameOver] = useState(false);
+  const [targetY, setTargetY] = useState(0); 
+  const [isClawMoving, setIsClawMoving] = useState(false);
+  const [popupPrize, setPopupPrize] = useState(null);
 
-  const gameOverRef = useRef(false);
-  useEffect(() => {
-    gameOverRef.current = gameOver;
-  }, [gameOver]);
+ 
+  const isClawMovingRef = useRef(false);
+  useEffect(() => { isClawMovingRef.current = isClawMoving; }, [isClawMoving]);
 
+  function getRandomPrize() {
+    const r = Math.random();
+    if (r < 0.4) return FAIL;
+    if (r < 0.6) return PRIZES[0];
+    if (r < 0.8) return PRIZES[1];
+    return PRIZES[2];
+  }
+
+  
   const handleGrabAttempt = () => {
-    if (gameOverRef.current) return;
-    setIsClawDown(false);
+    if (isClawMovingRef.current) return;
+    setIsClawMoving(true);
+    setTargetY(-1); 
     setTimeout(() => {
-      const success = Math.random() < 0.5;
-      setPopup(success ? "抓到了！🎉" : "沒抓到，再試一次！");
-      setAttemptCount((c) => c + 1);
-      if (success) setSuccessCount((c) => c + 1);
-    }, 1000);
+      setTargetY(0); 
+      setTimeout(() => {
+        setIsClawMoving(false);
+        const prize = getRandomPrize();
+        setPopupPrize(prize);
+      }, 1500); 
+    }, 1500); 
   };
 
   useEffect(() => {
     const listener = (e) => {
-      if (e.code === "Space" && !gameOverRef.current) {
+      if (e.code === "Space" && !isClawMovingRef.current) {
         e.preventDefault();
-        setIsClawDown(true);
         handleGrabAttempt();
       }
     };
@@ -106,50 +166,19 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!popup) return;
-    const t = setTimeout(() => setPopup(""), 2000);
+    if (!popupPrize) return;
+    const t = setTimeout(() => setPopupPrize(null), 2000);
     return () => clearTimeout(t);
-  }, [popup]);
-
-  useEffect(() => {
-    if (successCount >= 3) {
-      setGameOver(true);
-    }
-  }, [successCount]);
-
-  const handleRestart = () => {
-    setSuccessCount(0);
-    setAttemptCount(0);
-    setGameOver(false);
-    setPopup("");
-  };
-
-  const isHidden = true;
+  }, [popupPrize]);
 
   return (
     <div
       className="w-full h-screen relative bg-center bg-cover"
       style={{ backgroundImage: "url('/arcade-bg.png')" }}
     >
-      <Popup text={popup} />
+      <Popup prize={popupPrize} />
       <Instructions />
 
-      <div className="absolute top-4 left-4 bg-white/80 p-2 rounded text-sm z-50">
-        抓取次數：{attemptCount} / 成功：{successCount}
-      </div>
-
-      {gameOver && (
-        <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center z-50 text-white text-center space-y-4">
-          <div className="text-2xl font-bold">🎉 任務完成！</div>
-          <div>你成功抓到了 3 次娃娃！</div>
-          <button
-            onClick={handleRestart}
-            className="px-6 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-lg text-lg"
-          >
-            重新開始遊戲
-          </button>
-        </div>
-      )}
 
       <KeyboardControls
         map={[
@@ -169,15 +198,11 @@ export default function Home() {
           <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={Math.PI} />
           <pointLight position={[-10, -10, -10]} intensity={Math.PI} />
 
-          {!isHidden && (
-            <RoundedBox args={[1, 1, 1]} radius={0.05} smoothness={4}>
-              <meshPhongMaterial color="#f3f3f3" />
-            </RoundedBox>
-          )}
-
-          <Suspense fallback={null}>
-            <ClawModel clawPos={clawPos} />
-          </Suspense>
+          <group position={[0, -1.5, 0]}>
+            <Suspense fallback={null}>
+              <ClawModel clawPos={clawPos} targetY={targetY} setClawPos={setClawPos} />
+            </Suspense>
+          </group>
 
           <Environment background={false} preset="city" />
           <ContactShadows opacity={1} scale={10} blur={10} color="#DDDDDD" />
@@ -185,8 +210,6 @@ export default function Home() {
           <ClawCamera
             clawPos={clawPos}
             setClawPos={setClawPos}
-            isClawDown={isClawDown}
-            setIsClawDown={setIsClawDown}
           />
           <CameraControls />
           <axesHelper args={[10]} />
